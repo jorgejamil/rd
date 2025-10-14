@@ -49,7 +49,12 @@ class OptimizedDataProcessor:
         """Load ALL IQVIA data from Jan-Aug 2025 with memory-efficient aggregation"""
         iqvia_files = sorted(self.data_dir.glob("historico_iqvia_*.parquet"))
 
-        print(f"Carregando IQVIA (TODOS os meses de 2025 disponíveis com agregação)...")
+        # Check if running in cloud environment (limited memory)
+        import os
+        cloud_mode = os.getenv('STREAMLIT_CLOUD', 'false').lower() == 'true'
+        max_months = 3 if cloud_mode else 9  # Limit to 3 months in cloud
+
+        print(f"Carregando IQVIA ({'últimos %d meses' % max_months if cloud_mode else 'TODOS os meses de 2025'} com agregação)...")
 
         # Ler apenas colunas necessárias
         required_cols = ['id_periodo', 'cd_produto', 'cd_filial', 'cd_brick',
@@ -57,6 +62,7 @@ class OptimizedDataProcessor:
 
         # ESTRATÉGIA: Agregar cada arquivo antes de concatenar (economiza memória)
         aggregated_dfs = []
+        files_loaded = 0
 
         # Filtrar apenas arquivos de 2025
         for file in iqvia_files:
@@ -68,8 +74,11 @@ class OptimizedDataProcessor:
                 year = int(period_str[:4])
                 month = int(period_str[4:])
 
-                # Carregar todos os meses de 2025 até setembro
+                # Carregar últimos N meses de 2025
                 if year == 2025 and 1 <= month <= 9:
+                    # In cloud mode, only load recent months
+                    if cloud_mode and month <= (9 - max_months):
+                        continue  # Skip older months
                     print(f"  - Processando {file.name}...")
                     df = pd.read_parquet(file, columns=required_cols)
 
@@ -84,6 +93,7 @@ class OptimizedDataProcessor:
                     }).reset_index()
 
                     aggregated_dfs.append(df_agg)
+                    files_loaded += 1
                     del df  # Liberar memória imediatamente
 
         if not aggregated_dfs:
