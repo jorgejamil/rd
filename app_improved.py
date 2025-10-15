@@ -806,14 +806,15 @@ if not data_loaded:
 # NAVEGAÇÃO POR TABS
 # ==================================================
 
-tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs([
+tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8 = st.tabs([
     "🏠 Dashboard Executivo",
     "📈 Market Share",
     "🏷️ Por Categoria",
     "🗺️ Geográfica",
     "🎯 Oportunidades",
     "🔮 Projeções",
-    "🏙️ Análise BH"
+    "🏙️ Análise BH",
+    "🔍 Qualidade dos Dados"
 ])
 
 # ==================================================
@@ -4107,6 +4108,246 @@ with tab7:
 
         if not insights_bh:
             st.success("✅ Performance sólida em MG. Continuar monitorando métricas-chave.")
+
+# ==================================================
+# TAB 8: QUALIDADE DOS DADOS
+# ==================================================
+
+with tab8:
+    st.markdown('<div class="main-header">🔍 Qualidade dos Dados</div>', unsafe_allow_html=True)
+    st.markdown("Análise detalhada da qualidade, completude e consistência dos dados carregados")
+
+    # Obter dados
+    pricing_data = processor.get_filtered_pricing_data()
+    iqvia_data = processor.get_filtered_iqvia_data()
+
+    # Resumo Geral
+    st.markdown("### 📊 Resumo dos Dados Carregados")
+
+    col1, col2, col3, col4 = st.columns(4)
+
+    with col1:
+        create_kpi_card(
+            "Registros Pricing",
+            len(pricing_data),
+            format_type="number",
+            tooltip="Total de registros na base de preços"
+        )
+
+    with col2:
+        create_kpi_card(
+            "Registros IQVIA",
+            len(iqvia_data),
+            format_type="number",
+            tooltip="Total de registros na base IQVIA"
+        )
+
+    with col3:
+        periodo_pricing = f"{pricing_data['mes'].min().strftime('%b/%Y')} - {pricing_data['mes'].max().strftime('%b/%Y')}" if len(pricing_data) > 0 else "N/A"
+        st.metric("Período Pricing", periodo_pricing)
+
+    with col4:
+        periodo_iqvia = f"{iqvia_data['data'].min().strftime('%b/%Y')} - {iqvia_data['data'].max().strftime('%b/%Y')}" if len(iqvia_data) > 0 else "N/A"
+        st.metric("Período IQVIA", periodo_iqvia)
+
+    st.markdown("---")
+
+    # Análise de Completude - Pricing
+    st.markdown("### 📋 Completude dos Dados - Pricing")
+
+    col1, col2 = st.columns(2)
+
+    with col1:
+        if len(pricing_data) > 0:
+            # Calcular missing values
+            missing_data = pd.DataFrame({
+                'Coluna': pricing_data.columns,
+                'Total': len(pricing_data),
+                'Missing': pricing_data.isnull().sum(),
+                'Missing %': (pricing_data.isnull().sum() / len(pricing_data) * 100).round(2)
+            }).sort_values('Missing %', ascending=False)
+
+            fig = px.bar(
+                missing_data[missing_data['Missing %'] > 0],
+                x='Missing %',
+                y='Coluna',
+                orientation='h',
+                title="Dados Ausentes por Coluna - Pricing",
+                color='Missing %',
+                color_continuous_scale='Reds'
+            )
+            fig.update_layout(template="plotly_white", height=300)
+            st.plotly_chart(fig, use_container_width=True)
+
+            if missing_data['Missing %'].sum() == 0:
+                st.success("✅ Nenhum dado ausente na base Pricing!")
+
+    with col2:
+        if len(pricing_data) > 0:
+            # Estatísticas descritivas
+            st.markdown("**Estatísticas Pricing**")
+            stats = pd.DataFrame({
+                'Métrica': ['Produtos Únicos', 'UFs', 'Canais', 'Neogrupos', 'Meses'],
+                'Valor': [
+                    pricing_data['produto'].nunique(),
+                    pricing_data['uf'].nunique(),
+                    pricing_data['canal'].nunique(),
+                    pricing_data['neogrupo'].nunique(),
+                    pricing_data['mes'].nunique()
+                ]
+            })
+            st.dataframe(stats, use_container_width=True, hide_index=True)
+
+    st.markdown("---")
+
+    # Análise de Completude - IQVIA
+    st.markdown("### 📋 Completude dos Dados - IQVIA")
+
+    col1, col2 = st.columns(2)
+
+    with col1:
+        if len(iqvia_data) > 0:
+            # Calcular missing values
+            missing_iqvia = pd.DataFrame({
+                'Coluna': iqvia_data.columns,
+                'Total': len(iqvia_data),
+                'Missing': iqvia_data.isnull().sum(),
+                'Missing %': (iqvia_data.isnull().sum() / len(iqvia_data) * 100).round(2)
+            }).sort_values('Missing %', ascending=False)
+
+            fig = px.bar(
+                missing_iqvia[missing_iqvia['Missing %'] > 0],
+                x='Missing %',
+                y='Coluna',
+                orientation='h',
+                title="Dados Ausentes por Coluna - IQVIA",
+                color='Missing %',
+                color_continuous_scale='Reds'
+            )
+            fig.update_layout(template="plotly_white", height=300)
+            st.plotly_chart(fig, use_container_width=True)
+
+            if missing_iqvia['Missing %'].sum() == 0:
+                st.success("✅ Nenhum dado ausente na base IQVIA!")
+
+    with col2:
+        if len(iqvia_data) > 0:
+            # Estatísticas descritivas
+            st.markdown("**Estatísticas IQVIA**")
+            stats_iqvia = pd.DataFrame({
+                'Métrica': ['Produtos Únicos', 'Períodos', 'Share Médio (%)', 'Vendas RD Total', 'Vendas Conc. Total'],
+                'Valor': [
+                    f"{iqvia_data['cd_produto'].nunique():,}",
+                    iqvia_data['id_periodo'].nunique(),
+                    f"{iqvia_data['share'].mean():.1f}%",
+                    f"{iqvia_data['venda_rd'].sum():,.0f}",
+                    f"{iqvia_data['venda_concorrente'].sum():,.0f}"
+                ]
+            })
+            st.dataframe(stats_iqvia, use_container_width=True, hide_index=True)
+
+    st.markdown("---")
+
+    # Análise de Consistência
+    st.markdown("### ✅ Verificações de Consistência")
+
+    checks = []
+
+    # Check 1: Datas válidas
+    if len(pricing_data) > 0:
+        datas_validas = pricing_data['mes'].notna().all()
+        checks.append({
+            'Check': 'Datas válidas (Pricing)',
+            'Status': '✅ OK' if datas_validas else '❌ Erro',
+            'Descrição': 'Todas as datas são válidas' if datas_validas else 'Existem datas inválidas'
+        })
+
+    # Check 2: Valores numéricos positivos
+    if len(pricing_data) > 0:
+        valores_positivos = (pricing_data['rbv'] >= 0).all() and (pricing_data['qt_unidade_vendida'] >= 0).all()
+        checks.append({
+            'Check': 'Valores positivos (Pricing)',
+            'Status': '✅ OK' if valores_positivos else '⚠️ Aviso',
+            'Descrição': 'RBV e quantidades são positivas' if valores_positivos else 'Existem valores negativos'
+        })
+
+    # Check 3: Produtos duplicados
+    if len(pricing_data) > 0:
+        duplicados = pricing_data.duplicated(subset=['mes', 'produto', 'uf', 'canal', 'neogrupo']).sum()
+        sem_duplicados = duplicados == 0
+        checks.append({
+            'Check': 'Registros duplicados (Pricing)',
+            'Status': '✅ OK' if sem_duplicados else f'⚠️ {duplicados} duplicados',
+            'Descrição': 'Nenhum registro duplicado' if sem_duplicados else f'{duplicados} registros duplicados encontrados'
+        })
+
+    # Check 4: Market share válido (0-100%)
+    if len(iqvia_data) > 0 and 'share' in iqvia_data.columns:
+        share_valido = ((iqvia_data['share'] >= 0) & (iqvia_data['share'] <= 100)).all()
+        checks.append({
+            'Check': 'Market Share válido (IQVIA)',
+            'Status': '✅ OK' if share_valido else '❌ Erro',
+            'Descrição': 'Share entre 0-100%' if share_valido else 'Existem valores de share inválidos'
+        })
+
+    # Check 5: Consistência temporal
+    if len(pricing_data) > 0:
+        meses_consecutivos = pricing_data.groupby('mes').size().reset_index().sort_values('mes')
+        gaps = (meses_consecutivos['mes'].diff() > pd.Timedelta(days=35)).sum()
+        sem_gaps = gaps == 0
+        checks.append({
+            'Check': 'Continuidade temporal (Pricing)',
+            'Status': '✅ OK' if sem_gaps else f'⚠️ {gaps} gaps',
+            'Descrição': 'Dados mensais contínuos' if sem_gaps else f'{gaps} gaps temporais encontrados'
+        })
+
+    # Exibir checks
+    checks_df = pd.DataFrame(checks)
+    st.dataframe(checks_df, use_container_width=True, hide_index=True)
+
+    # Resumo de qualidade
+    total_checks = len(checks)
+    checks_ok = len([c for c in checks if c['Status'].startswith('✅')])
+    qualidade_score = (checks_ok / total_checks * 100) if total_checks > 0 else 0
+
+    st.markdown("---")
+    st.markdown("### 🎯 Score de Qualidade")
+
+    col1, col2, col3 = st.columns([1, 2, 1])
+
+    with col2:
+        # Gauge chart
+        fig = go.Figure(go.Indicator(
+            mode="gauge+number+delta",
+            value=qualidade_score,
+            domain={'x': [0, 1], 'y': [0, 1]},
+            title={'text': "Qualidade Geral dos Dados"},
+            delta={'reference': 90},
+            gauge={
+                'axis': {'range': [None, 100]},
+                'bar': {'color': COLORS['primary']},
+                'steps': [
+                    {'range': [0, 60], 'color': COLORS['light']},
+                    {'range': [60, 85], 'color': '#ffd700'},
+                    {'range': [85, 100], 'color': COLORS['secondary']}
+                ],
+                'threshold': {
+                    'line': {'color': "red", 'width': 4},
+                    'thickness': 0.75,
+                    'value': 90
+                }
+            }
+        ))
+        fig.update_layout(height=300)
+        st.plotly_chart(fig, use_container_width=True)
+
+    # Recomendações
+    if qualidade_score < 85:
+        st.warning(f"⚠️ **Score de qualidade**: {qualidade_score:.0f}% - Revisar dados com problemas identificados")
+    elif qualidade_score < 95:
+        st.info(f"ℹ️ **Score de qualidade**: {qualidade_score:.0f}% - Boa qualidade, pequenos ajustes recomendados")
+    else:
+        st.success(f"✅ **Score de qualidade**: {qualidade_score:.0f}% - Excelente qualidade dos dados!")
 
 # Footer
 st.markdown("---")
