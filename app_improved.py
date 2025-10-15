@@ -806,13 +806,14 @@ if not data_loaded:
 # NAVEGAÇÃO POR TABS
 # ==================================================
 
-tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
+tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs([
     "🏠 Dashboard Executivo",
     "📈 Market Share",
     "🏷️ Por Categoria",
     "🗺️ Geográfica",
     "🎯 Oportunidades",
-    "🔮 Projeções"
+    "🔮 Projeções",
+    "🏙️ Análise BH"
 ])
 
 # ==================================================
@@ -3833,6 +3834,279 @@ with tab6:
             ),
             unsafe_allow_html=True
         )
+
+# ==================================================
+# TAB 7: ANÁLISE COMPETITIVA BH
+# ==================================================
+
+with tab7:
+    st.markdown('<div class="main-header">🏙️ Análise Competitiva - Belo Horizonte (MG)</div>', unsafe_allow_html=True)
+    st.markdown("Análise profunda da competitividade em BH: Market Share, Concorrência e Oportunidades")
+
+    # Filtrar dados de MG
+    pricing_mg = processor.get_filtered_pricing_data()
+    pricing_mg = pricing_mg[pricing_mg['uf'] == 'MG']
+
+    if len(pricing_mg) == 0:
+        st.warning("⚠️ Nenhum dado disponível para Minas Gerais no período selecionado")
+    else:
+        # KPIs Principais de MG
+        st.markdown("### 📊 Performance Geral - Minas Gerais")
+        col1, col2, col3, col4 = st.columns(4)
+
+        receita_mg = pricing_mg['rbv'].sum()
+        unidades_mg = pricing_mg['qt_unidade_vendida'].sum()
+        ticket_mg = receita_mg / unidades_mg if unidades_mg > 0 else 0
+        produtos_mg = pricing_mg['produto'].nunique()
+
+        with col1:
+            create_kpi_card(
+                "Receita Total MG",
+                receita_mg,
+                format_type="currency",
+                tooltip="Soma total de vendas (RBV) em Minas Gerais"
+            )
+
+        with col2:
+            create_kpi_card(
+                "Unidades Vendidas",
+                unidades_mg,
+                format_type="number",
+                tooltip="Total de unidades vendidas em MG"
+            )
+
+        with col3:
+            create_kpi_card(
+                "Ticket Médio MG",
+                ticket_mg,
+                format_type="currency",
+                tooltip="Receita Total / Unidades Vendidas"
+            )
+
+        with col4:
+            create_kpi_card(
+                "SKUs Ativos",
+                produtos_mg,
+                format_type="number",
+                tooltip="Produtos únicos vendidos em MG"
+            )
+
+        st.markdown("---")
+
+        # Market Share Intelligence BH
+        st.markdown("### 🎯 Market Share & Competitividade")
+
+        # Dados IQVIA para análise competitiva
+        iqvia_data = processor.get_filtered_iqvia_data()
+
+        if len(iqvia_data) > 0:
+            col1, col2 = st.columns(2)
+
+            with col1:
+                # Market Share Evolution
+                ms_trend = processor.get_market_share_trend()
+                if len(ms_trend) > 0:
+                    fig = go.Figure()
+                    fig.add_trace(go.Scatter(
+                        x=ms_trend['data'],
+                        y=ms_trend['share'],
+                        mode='lines+markers',
+                        name='Market Share RD',
+                        line=dict(color=COLORS['primary'], width=3),
+                        marker=dict(size=8)
+                    ))
+                    fig.update_layout(
+                        title="Evolução do Market Share - MG",
+                        xaxis_title="Período",
+                        yaxis_title="Share (%)",
+                        yaxis_ticksuffix="%",
+                        template="plotly_white",
+                        height=350
+                    )
+                    st.plotly_chart(fig, use_container_width=True)
+
+            with col2:
+                # Vendas RD vs Concorrente
+                ms_data = processor.get_market_share_metrics()
+                if ms_data and 'venda_rd' in ms_data and 'venda_concorrente' in ms_data:
+                    vendas_rd = ms_data['venda_rd']
+                    vendas_conc = ms_data['venda_concorrente']
+
+                    fig = go.Figure(data=[
+                        go.Bar(name='Raia Drogasil', x=['Vendas'], y=[vendas_rd], marker_color=COLORS['secondary']),
+                        go.Bar(name='Concorrência', x=['Vendas'], y=[vendas_conc], marker_color=COLORS['danger'])
+                    ])
+                    fig.update_layout(
+                        title="RD vs Concorrência - Volume de Vendas",
+                        yaxis_title="Unidades",
+                        template="plotly_white",
+                        barmode='group',
+                        height=350
+                    )
+                    st.plotly_chart(fig, use_container_width=True)
+                else:
+                    st.info("📊 Dados de competitividade (IQVIA) não disponíveis para o período selecionado")
+
+        st.markdown("---")
+
+        # Análise por Categoria em MG
+        st.markdown("### 🏷️ Performance por Categoria - MG")
+
+        cat_performance = pricing_mg.groupby('neogrupo').agg({
+            'rbv': 'sum',
+            'qt_unidade_vendida': 'sum',
+            'produto': 'nunique'
+        }).reset_index()
+        cat_performance.columns = ['Categoria', 'Receita', 'Unidades', 'SKUs']
+        cat_performance = cat_performance.sort_values('Receita', ascending=False)
+
+        col1, col2 = st.columns(2)
+
+        with col1:
+            # Receita por categoria
+            fig = px.bar(
+                cat_performance.head(10),
+                x='Receita',
+                y='Categoria',
+                orientation='h',
+                title="Top 10 Categorias por Receita - MG",
+                color='Receita',
+                color_continuous_scale='Blues'
+            )
+            fig.update_layout(template="plotly_white", height=400)
+            st.plotly_chart(fig, use_container_width=True)
+
+        with col2:
+            # Unidades por categoria
+            fig = px.bar(
+                cat_performance.head(10),
+                x='Unidades',
+                y='Categoria',
+                orientation='h',
+                title="Top 10 Categorias por Volume - MG",
+                color='Unidades',
+                color_continuous_scale='Greens'
+            )
+            fig.update_layout(template="plotly_white", height=400)
+            st.plotly_chart(fig, use_container_width=True)
+
+        st.markdown("---")
+
+        # Evolução Temporal MG
+        st.markdown("### 📈 Evolução Temporal - Minas Gerais")
+
+        temporal_mg = pricing_mg.groupby('mes').agg({
+            'rbv': 'sum',
+            'qt_unidade_vendida': 'sum'
+        }).reset_index().sort_values('mes')
+        temporal_mg['ticket_medio'] = temporal_mg['rbv'] / temporal_mg['qt_unidade_vendida']
+
+        col1, col2 = st.columns(2)
+
+        with col1:
+            fig = go.Figure()
+            fig.add_trace(go.Scatter(
+                x=temporal_mg['mes'],
+                y=temporal_mg['rbv'],
+                mode='lines+markers',
+                name='Receita',
+                line=dict(color=COLORS['primary'], width=3),
+                marker=dict(size=10),
+                fill='tozeroy'
+            ))
+            fig.update_layout(
+                title="Evolução da Receita - MG",
+                xaxis_title="Mês",
+                yaxis_title="Receita (R$)",
+                template="plotly_white",
+                height=350
+            )
+            st.plotly_chart(fig, use_container_width=True)
+
+        with col2:
+            fig = go.Figure()
+            fig.add_trace(go.Scatter(
+                x=temporal_mg['mes'],
+                y=temporal_mg['ticket_medio'],
+                mode='lines+markers',
+                name='Ticket Médio',
+                line=dict(color=COLORS['secondary'], width=3),
+                marker=dict(size=10)
+            ))
+            fig.update_layout(
+                title="Evolução do Ticket Médio - MG",
+                xaxis_title="Mês",
+                yaxis_title="Ticket Médio (R$)",
+                template="plotly_white",
+                height=350
+            )
+            st.plotly_chart(fig, use_container_width=True)
+
+        st.markdown("---")
+
+        # Insights e Recomendações
+        st.markdown("### 💡 Insights Estratégicos - BH/MG")
+
+        # Calcular métricas chave
+        share_atual = ms_data.get('share', 0) if (ms_data and isinstance(ms_data, dict)) else 0
+        crescimento_receita = ((temporal_mg['rbv'].iloc[-1] - temporal_mg['rbv'].iloc[0]) / temporal_mg['rbv'].iloc[0] * 100) if len(temporal_mg) > 1 else 0
+
+        insights_bh = []
+
+        if share_atual > 0 and share_atual < 35:
+            insights_bh.append({
+                'emoji': '⚠️',
+                'title': 'Market Share Abaixo da Média',
+                'description': f'Market share de {share_atual:.1f}% está abaixo da meta. Análise de concorrência é crucial.',
+                'action': 'Investigar estratégias dos concorrentes e identificar gaps de portfolio'
+            })
+
+        if crescimento_receita < 0:
+            insights_bh.append({
+                'emoji': '📉',
+                'title': 'Queda na Receita',
+                'description': f'Receita apresentou queda de {abs(crescimento_receita):.1f}% no período.',
+                'action': 'Revisar estratégia de precificação e disponibilidade de produtos'
+            })
+        elif crescimento_receita > 10:
+            insights_bh.append({
+                'emoji': '📈',
+                'title': 'Crescimento Positivo',
+                'description': f'Receita cresceu {crescimento_receita:.1f}% no período.',
+                'action': 'Manter estratégia atual e expandir para categorias similares'
+            })
+
+        # Análise de concentração
+        top3_receita = cat_performance.head(3)['Receita'].sum()
+        concentracao = (top3_receita / receita_mg * 100) if receita_mg > 0 else 0
+
+        if concentracao > 70:
+            insights_bh.append({
+                'emoji': '🎯',
+                'title': 'Alta Concentração de Receita',
+                'description': f'{concentracao:.1f}% da receita vem das top 3 categorias.',
+                'action': 'Diversificar portfolio para reduzir dependência de poucas categorias'
+            })
+
+        # Exibir insights
+        for insight in insights_bh:
+            st.markdown(f"""
+            <div class="insight-card">
+                <div style="font-size: 2rem; margin-bottom: 0.5rem;">{insight['emoji']}</div>
+                <div style="font-size: 1.1rem; font-weight: 600; margin-bottom: 0.5rem; color: {COLORS['dark']};">
+                    {insight['title']}
+                </div>
+                <div style="font-size: 0.95rem; margin-bottom: 0.75rem; color: {COLORS['neutral']};">
+                    {insight['description']}
+                </div>
+                <div style="font-size: 0.9rem; padding: 0.5rem; background-color: {COLORS['light']}; border-radius: 4px; border-left: 3px solid {COLORS['primary']};">
+                    <strong>Ação Recomendada:</strong> {insight['action']}
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
+
+        if not insights_bh:
+            st.success("✅ Performance sólida em MG. Continuar monitorando métricas-chave.")
 
 # Footer
 st.markdown("---")
