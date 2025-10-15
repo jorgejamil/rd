@@ -4045,8 +4045,103 @@ with tab7:
 
         st.markdown("---")
 
-        # Insights e Recomendações
-        st.markdown("### 💡 Insights Estratégicos - BH/MG")
+        # Análise de Margem e Pricing
+        st.markdown("### 💰 Análise de Margem e Oportunidades de Pricing")
+
+        # Calcular métricas de margem
+        pricing_mg_detailed = pricing_mg.copy()
+        pricing_mg_detailed['margem_unitaria'] = pricing_mg_detailed['rbv'] / pricing_mg_detailed['qt_unidade_vendida']
+
+        # Margem por categoria
+        margem_categoria = pricing_mg_detailed.groupby('neogrupo').agg({
+            'rbv': 'sum',
+            'qt_unidade_vendida': 'sum',
+            'margem_unitaria': 'mean'
+        }).reset_index()
+        margem_categoria['margem_total_pct'] = (margem_categoria['rbv'] / margem_categoria['rbv'].sum() * 100)
+        margem_categoria = margem_categoria.sort_values('rbv', ascending=False).head(10)
+
+        col1, col2 = st.columns(2)
+
+        with col1:
+            fig = px.bar(
+                margem_categoria,
+                x='neogrupo',
+                y='margem_unitaria',
+                title="Margem Unitária Média por Categoria",
+                color='margem_unitaria',
+                color_continuous_scale='RdYlGn',
+                labels={'margem_unitaria': 'Margem (R$)', 'neogrupo': 'Categoria'}
+            )
+            fig.update_layout(template="plotly_white", height=350, xaxis_tickangle=-45)
+            st.plotly_chart(fig, use_container_width=True)
+
+        with col2:
+            fig = px.scatter(
+                margem_categoria,
+                x='qt_unidade_vendida',
+                y='margem_unitaria',
+                size='rbv',
+                hover_name='neogrupo',
+                title="Volume vs Margem (tamanho = receita)",
+                labels={'qt_unidade_vendida': 'Unidades Vendidas', 'margem_unitaria': 'Margem Unitária (R$)'},
+                color='margem_total_pct',
+                color_continuous_scale='Blues'
+            )
+            fig.update_layout(template="plotly_white", height=350)
+            st.plotly_chart(fig, use_container_width=True)
+
+        st.markdown("---")
+
+        # Diagnóstico do Problema BH
+        st.markdown("### 🔍 Diagnóstico: Por que BH é um Problema?")
+
+        # Análise comparativa com outras UFs
+        pricing_all = processor.get_filtered_pricing_data()
+        comparacao_ufs = pricing_all.groupby('uf').agg({
+            'rbv': 'sum',
+            'qt_unidade_vendida': 'sum'
+        }).reset_index()
+        comparacao_ufs['ticket_medio'] = comparacao_ufs['rbv'] / comparacao_ufs['qt_unidade_vendida']
+        comparacao_ufs = comparacao_ufs.sort_values('rbv', ascending=False).head(10)
+
+        # Ranking MG
+        ranking_mg = comparacao_ufs['uf'].tolist().index('MG') + 1 if 'MG' in comparacao_ufs['uf'].tolist() else None
+        ticket_mg_comp = comparacao_ufs[comparacao_ufs['uf'] == 'MG']['ticket_medio'].values[0] if 'MG' in comparacao_ufs['uf'].tolist() else 0
+        ticket_medio_nacional = comparacao_ufs['ticket_medio'].mean()
+
+        col1, col2, col3 = st.columns(3)
+
+        with col1:
+            create_kpi_card(
+                "Ranking Nacional",
+                f"#{ranking_mg}" if ranking_mg else "N/A",
+                format_type="text",
+                tooltip="Posição de MG no ranking nacional por receita"
+            )
+
+        with col2:
+            delta_ticket = ((ticket_mg_comp - ticket_medio_nacional) / ticket_medio_nacional * 100) if ticket_medio_nacional > 0 else 0
+            create_kpi_card(
+                "Ticket vs Média BR",
+                delta_ticket,
+                format_type="percent",
+                tooltip="Diferença do ticket médio MG vs média nacional"
+            )
+
+        with col3:
+            participacao_mg = (receita_mg / pricing_all['rbv'].sum() * 100) if pricing_all['rbv'].sum() > 0 else 0
+            create_kpi_card(
+                "Participação MG",
+                participacao_mg,
+                format_type="percent",
+                tooltip="% da receita total que vem de MG"
+            )
+
+        st.markdown("---")
+
+        # Insights e Recomendações Expandidos
+        st.markdown("### 💡 Insights Estratégicos e Plano de Ação")
 
         # Calcular métricas chave
         share_atual = ms_data.get('share', 0) if (ms_data and isinstance(ms_data, dict)) else 0
@@ -4054,60 +4149,140 @@ with tab7:
 
         insights_bh = []
 
+        # 1. Análise de Market Share
         if share_atual > 0 and share_atual < 35:
             insights_bh.append({
                 'emoji': '⚠️',
-                'title': 'Market Share Abaixo da Média',
-                'description': f'Market share de {share_atual:.1f}% está abaixo da meta. Análise de concorrência é crucial.',
-                'action': 'Investigar estratégias dos concorrentes e identificar gaps de portfolio'
+                'title': '🎯 PROBLEMA: Market Share Abaixo da Meta',
+                'description': f'Market share de {share_atual:.1f}% está significativamente abaixo do esperado. Concorrência está ganhando espaço.',
+                'diagnostico': 'Possíveis causas: (1) Portfolio inferior aos concorrentes, (2) Preços menos competitivos, (3) Menor visibilidade/disponibilidade',
+                'action': '📋 Ações: Realizar benchmarking de preços vs concorrentes • Mapear gaps de portfolio • Intensificar promoções nas categorias-chave • Negociar melhores condições com fornecedores'
             })
 
-        if crescimento_receita < 0:
+        # 2. Análise de Crescimento
+        if crescimento_receita < -5:
             insights_bh.append({
                 'emoji': '📉',
-                'title': 'Queda na Receita',
-                'description': f'Receita apresentou queda de {abs(crescimento_receita):.1f}% no período.',
-                'action': 'Revisar estratégia de precificação e disponibilidade de produtos'
+                'title': '🚨 PROBLEMA: Queda Significativa na Receita',
+                'description': f'Receita caiu {abs(crescimento_receita):.1f}% no período analisado.',
+                'diagnostico': 'Indicadores de perda de competitividade: clientes migrando para concorrentes ou reduzindo consumo',
+                'action': '📋 Ações: Análise de churn de clientes • Revisar estratégia de precificação • Aumentar mix de produtos de alta margem • Campanhas de reativação'
             })
-        elif crescimento_receita > 10:
+        elif crescimento_receita < 5:
             insights_bh.append({
-                'emoji': '📈',
-                'title': 'Crescimento Positivo',
-                'description': f'Receita cresceu {crescimento_receita:.1f}% no período.',
-                'action': 'Manter estratégia atual e expandir para categorias similares'
+                'emoji': '⚡',
+                'title': '⚠️ ALERTA: Crescimento Estagnado',
+                'description': f'Crescimento de apenas {crescimento_receita:.1f}% - abaixo do potencial do mercado.',
+                'diagnostico': 'Mercado crescendo mas RD não está capturando o crescimento proporcionalmente',
+                'action': '📋 Ações: Identificar categorias de alto crescimento no mercado • Expandir portfolio nessas categorias • Cross-selling e up-selling'
             })
 
-        # Análise de concentração
+        # 3. Análise de Ticket Médio
+        if delta_ticket < -10:
+            insights_bh.append({
+                'emoji': '💵',
+                'title': '💰 OPORTUNIDADE: Ticket Médio Baixo',
+                'description': f'Ticket médio {delta_ticket:.1f}% inferior à média nacional (R$ {ticket_mg_comp:.2f} vs R$ {ticket_medio_nacional:.2f})',
+                'diagnostico': 'Clientes comprando produtos de menor valor ou menos itens por compra',
+                'action': '📋 Ações: Implementar estratégias de upselling • Bundling de produtos • Programas de fidelidade • Promoções "leve 3 pague 2" em categorias estratégicas'
+            })
+
+        # 4. Análise de Concentração
         top3_receita = cat_performance.head(3)['Receita'].sum()
         concentracao = (top3_receita / receita_mg * 100) if receita_mg > 0 else 0
 
         if concentracao > 70:
             insights_bh.append({
                 'emoji': '🎯',
-                'title': 'Alta Concentração de Receita',
-                'description': f'{concentracao:.1f}% da receita vem das top 3 categorias.',
-                'action': 'Diversificar portfolio para reduzir dependência de poucas categorias'
+                'title': '⚠️ RISCO: Alta Concentração de Receita',
+                'description': f'{concentracao:.1f}% da receita dependente de apenas 3 categorias - alto risco.',
+                'diagnostico': 'Vulnerabilidade a mudanças de mercado ou ações competitivas nessas categorias',
+                'action': '📋 Ações: Diversificação urgente do portfolio • Desenvolver categorias emergentes • Testar produtos inovadores • Expandir para nichos menos competidos'
             })
 
-        # Exibir insights
-        for insight in insights_bh:
+        # 5. Análise de Margem
+        margem_baixa = margem_categoria[margem_categoria['margem_unitaria'] < margem_categoria['margem_unitaria'].median()]
+        if len(margem_baixa) >= 5:
+            insights_bh.append({
+                'emoji': '💸',
+                'title': '💰 OPORTUNIDADE: Melhorar Margem em Categorias-Chave',
+                'description': f'{len(margem_baixa)} categorias importantes com margem abaixo da mediana.',
+                'diagnostico': 'Oportunidade de otimização de pricing sem perder competitividade',
+                'action': f'📋 Ações: Revisar preços nas categorias: {", ".join(margem_baixa.head(3)["neogrupo"].tolist())} • Negociar melhores custos • Substituir por produtos de marca própria'
+            })
+
+        # 6. Análise Competitiva IQVIA
+        if ms_data and isinstance(ms_data, dict) and 'venda_concorrente' in ms_data and 'venda_rd' in ms_data:
+            gap_competitivo = ms_data['venda_concorrente'] - ms_data['venda_rd']
+            if gap_competitivo > 0:
+                insights_bh.append({
+                    'emoji': '🏆',
+                    'title': '🎯 PROBLEMA: Gap Competitivo Significativo',
+                    'description': f'Concorrência vende {(gap_competitivo/ms_data["venda_rd"]*100):.1f}% mais unidades que RD.',
+                    'diagnostico': 'Forte evidência de desvantagem competitiva em BH - concorrentes dominando o mercado',
+                    'action': '📋 Ações URGENTES: War room para estratégia BH • Inteligência competitiva aprofundada • Ações promocionais agressivas • Revisar localização e cobertura de lojas'
+                })
+
+        # 7. Análise de Participação Regional
+        if participacao_mg < 8:
+            insights_bh.append({
+                'emoji': '📍',
+                'title': '🌎 OPORTUNIDADE: Baixa Penetração Regional',
+                'description': f'MG representa apenas {participacao_mg:.1f}% da receita total - potencial inexplorado.',
+                'diagnostico': 'BH é capital importante mas participação regional abaixo do esperado para o tamanho do mercado',
+                'action': '📋 Ações: Expansão de pontos de venda em BH • Parcerias locais • Marketing regional focado • Produtos adaptados ao perfil do consumidor mineiro'
+            })
+
+        # Exibir insights com formato expandido
+        for i, insight in enumerate(insights_bh, 1):
             st.markdown(f"""
-            <div class="insight-card">
-                <div style="font-size: 2rem; margin-bottom: 0.5rem;">{insight['emoji']}</div>
-                <div style="font-size: 1.1rem; font-weight: 600; margin-bottom: 0.5rem; color: {COLORS['dark']};">
-                    {insight['title']}
+            <div class="insight-card" style="margin-bottom: 1.5rem; border-left: 4px solid {'#dc3545' if 'PROBLEMA' in insight['title'] else '#ffc107' if 'ALERTA' in insight['title'] or 'RISCO' in insight['title'] else '#28a745'};">
+                <div style="display: flex; align-items: center; margin-bottom: 0.75rem;">
+                    <div style="font-size: 2.5rem; margin-right: 0.75rem;">{insight['emoji']}</div>
+                    <div style="font-size: 1.2rem; font-weight: 700; color: {COLORS['dark']};">
+                        {i}. {insight['title']}
+                    </div>
                 </div>
-                <div style="font-size: 0.95rem; margin-bottom: 0.75rem; color: {COLORS['neutral']};">
-                    {insight['description']}
+                <div style="font-size: 1rem; margin-bottom: 0.75rem; padding: 0.75rem; background-color: #f8f9fa; border-radius: 4px;">
+                    <strong>📊 Situação:</strong> {insight['description']}
                 </div>
-                <div style="font-size: 0.9rem; padding: 0.5rem; background-color: {COLORS['light']}; border-radius: 4px; border-left: 3px solid {COLORS['primary']};">
-                    <strong>Ação Recomendada:</strong> {insight['action']}
+                <div style="font-size: 0.95rem; margin-bottom: 0.75rem; padding: 0.75rem; background-color: #fff3cd; border-radius: 4px;">
+                    <strong>🔍 Diagnóstico:</strong> {insight['diagnostico']}
+                </div>
+                <div style="font-size: 0.95rem; padding: 0.75rem; background-color: #d1ecf1; border-radius: 4px; border-left: 3px solid {COLORS['primary']};">
+                    {insight['action']}
                 </div>
             </div>
             """, unsafe_allow_html=True)
 
         if not insights_bh:
             st.success("✅ Performance sólida em MG. Continuar monitorando métricas-chave.")
+        else:
+            # Resumo Executivo
+            st.markdown("---")
+            st.markdown("### 📋 Resumo Executivo: Estratégia BH")
+
+            problemas = [i for i in insights_bh if 'PROBLEMA' in i['title']]
+            oportunidades = [i for i in insights_bh if 'OPORTUNIDADE' in i['title']]
+
+            col1, col2 = st.columns(2)
+            with col1:
+                st.markdown(f"""
+                <div style="padding: 1rem; background-color: #f8d7da; border-radius: 8px; border-left: 4px solid #dc3545;">
+                    <h4 style="color: #721c24; margin-top: 0;">🚨 Problemas Críticos</h4>
+                    <p style="font-size: 1.5rem; font-weight: bold; margin: 0;">{len(problemas)}</p>
+                    <p style="font-size: 0.9rem; margin: 0;">Requerem ação imediata</p>
+                </div>
+                """, unsafe_allow_html=True)
+
+            with col2:
+                st.markdown(f"""
+                <div style="padding: 1rem; background-color: #d4edda; border-radius: 8px; border-left: 4px solid #28a745;">
+                    <h4 style="color: #155724; margin-top: 0;">💰 Oportunidades</h4>
+                    <p style="font-size: 1.5rem; font-weight: bold; margin: 0;">{len(oportunidades)}</p>
+                    <p style="font-size: 0.9rem; margin: 0;">Para ganho rápido (quick wins)</p>
+                </div>
+                """, unsafe_allow_html=True)
 
 # ==================================================
 # TAB 8: QUALIDADE DOS DADOS
